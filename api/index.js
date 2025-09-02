@@ -236,93 +236,256 @@ app.use('/message', mcpHandler);
 app.get('/', (req, res) => {
   const homePage = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Descope Store MCP Server - Vercel</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descope Store MCP Server</title>
+    <script>
+        const SERVER_URL = '${SERVER_URL}/sse';
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#7deded", // Teal
+                        secondary: "#6366F1", // Indigo
+                        accent: "#EC4899", // Pink
+                        dark: {
+                            DEFAULT: "#111827",
+                            lighter: "#1F2937",
+                        }
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "system-ui", "sans-serif"],
+                        heading: ["Space Grotesk", "system-ui", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
     <style>
-        body { 
-            font-family: Inter, system-ui, sans-serif;
-            max-width: 800px; 
-            margin: 0 auto;
-            padding: 40px 20px;
-            background: #111827;
-            color: #f9fafb;
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+        body {
+            background-color: #111827;
+            color: #F3F4F6;
         }
-        .container {
-            background: #1f2937;
-            border-radius: 12px;
-            padding: 40px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+
+        pre {
+            background: #1F2937 !important;
+            color: #E5E7EB !important;
+            position: relative;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-word;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border: 1px solid #374151;
         }
-        .title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #7deded, #6366f1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 16px;
-            text-align: center;
+
+        .card {
+            background: #1F2937;
+            border: 1px solid #374151;
         }
-        .subtitle {
-            text-align: center;
-            color: #9ca3af;
-            margin-bottom: 40px;
+
+        .copy-button {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #374151;
+            color: #9CA3AF;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .deployment-badge {
+
+        .copy-button:hover {
+            background: #4B5563;
+            color: #F3F4F6;
+        }
+
+        .copy-button.copied {
             background: #059669;
             color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            display: inline-block;
-            margin-bottom: 20px;
-        }
-        .endpoints {
-            background: #0f172a;
-            padding: 20px;
-            border-radius: 8px;
-            font-family: 'Monaco', monospace;
-            font-size: 0.9rem;
-            margin: 20px 0;
-        }
-        .endpoint {
-            margin: 8px 0;
-            color: #7deded;
-        }
-        .feature {
-            background: #374151;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #7deded;
-            margin: 20px 0;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1 class="title">🔐 Descope Store MCP</h1>
-        <p class="subtitle">
-            <span class="deployment-badge">✨ Deployed on Vercel</span><br>
-            Model Context Protocol Server with OAuth 2.1
-        </p>
-        
-        <div class="feature">
-            <h3>🛡️ Production Ready</h3>
-            <p>Deployed on Vercel with Descope OAuth 2.1 authentication</p>
+<body class="dark">
+    <main class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="text-center mb-12">
+            <h1 class="text-5xl font-bold font-heading text-white mb-4">
+                🔐 Descope Store MCP
+            </h1>
+            <p class="text-xl text-gray-300 mb-6">
+                Model Context Protocol Server with OAuth 2.1 Authentication
+            </p>
+            <div class="inline-flex items-center bg-green-600 text-white px-4 py-2 rounded-full text-sm font-medium">
+                ✨ Deployed on Vercel
+            </div>
         </div>
 
-        <h3>🔗 MCP Endpoints</h3>
-        <div class="endpoints">
-            <div class="endpoint">SSE Endpoint: ${SERVER_URL}/sse</div>
-            <div class="endpoint">Message Endpoint: ${SERVER_URL}/message</div>
-            <div class="endpoint">OAuth Metadata: ${SERVER_URL}/.well-known/oauth-authorization-server</div>
-        </div>
+        <div class="grid gap-8">
+            <div class="card rounded-lg p-6">
+                <h2 class="text-2xl font-bold font-heading text-white mb-4">About</h2>
+                <p class="text-gray-300 mb-4">
+                    This MCP server provides authenticated access to the Descope Authentication Store,
+                    featuring premium authentication-themed merchandise and apparel. The server uses
+                    <a href="https://www.descope.com/" class="text-primary hover:underline">Descope</a>
+                    OAuth 2.1 for secure authentication and authorization.
+                </p>
+            </div>
 
-        <div style="text-align: center; margin-top: 40px; color: #6b7280;">
-            <p>Project ID: ${process.env.DESCOPE_PROJECT_ID}</p>
-            <p>Powered by @descope/mcp-express + Vercel</p>
+            <div class="card rounded-lg p-6">
+                <h2 class="text-2xl font-bold font-heading text-white mb-4">Quick Start</h2>
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-3">Server URL</h3>
+                        <pre class="relative"><code id="server-url">${SERVER_URL}/sse</code><button class="copy-button" onclick="copyToClipboard('server-url', this)">Copy</button></pre>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-3">Configuration</h3>
+                        <pre class="relative"><code id="config-json">{
+  "mcpServers": {
+    "descope-store": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-remote",
+        "${SERVER_URL}/sse"
+      ]
+    }
+  }
+}</code><button class="copy-button" onclick="copyToClipboard('config-json', this)">Copy</button></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card rounded-lg p-6">
+                <h2 class="text-2xl font-bold font-heading text-white mb-4">IDE Integration</h2>
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-3">Claude Desktop</h3>
+                        <ol class="list-decimal pl-6 space-y-2 text-gray-300">
+                            <li>Open Claude Desktop Settings</li>
+                            <li>Navigate to <strong class="font-semibold text-white">MCP Servers</strong></li>
+                            <li>Add the configuration above to your <code class="bg-gray-800 px-2 py-1 rounded">claude_desktop_config.json</code></li>
+                            <li>Restart Claude Desktop</li>
+                            <li>Authenticate via OAuth when prompted</li>
+                        </ol>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-3">Windsurf</h3>
+                        <ol class="list-decimal pl-6 space-y-2 text-gray-300">
+                            <li>Open Windsurf Settings</li>
+                            <li>Navigate to <strong class="font-semibold text-white">Cascade</strong> → <strong class="font-semibold text-white">Model Context Provider Servers</strong></li>
+                            <li>Select <strong class="font-semibold text-white">Add Server</strong></li>
+                            <li>Enter the server URL above</li>
+                            <li>Complete OAuth authentication</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card rounded-lg p-6">
+                <h2 class="text-2xl font-bold font-heading text-white mb-4">Available Tools</h2>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h4 class="font-semibold text-white mb-2">search_products</h4>
+                        <p class="text-gray-300 text-sm">Search for Descope store products by query and category</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h4 class="font-semibold text-white mb-2">get_product</h4>
+                        <p class="text-gray-300 text-sm">Get detailed information about a specific product</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h4 class="font-semibold text-white mb-2">compare_products</h4>
+                        <p class="text-gray-300 text-sm">Compare multiple products side by side</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h4 class="font-semibold text-white mb-2">get_store_info</h4>
+                        <p class="text-gray-300 text-sm">Get general store information and statistics</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card rounded-lg p-6">
+                <h2 class="text-2xl font-bold font-heading text-white mb-4">Authentication</h2>
+                <div class="space-y-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span class="text-gray-300">OAuth 2.1 compliant with PKCE</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span class="text-gray-300">Scope-based access control</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span class="text-gray-300">Bearer token authentication</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span class="text-gray-300">Secure Descope integration</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card rounded-lg p-6">
+                <h2 class="text-2xl font-bold font-heading text-white mb-4">Troubleshooting</h2>
+                <p class="mb-4 text-gray-300">If you encounter authentication issues, try clearing the MCP auth cache:</p>
+                <pre class="relative"><code>rm -rf ~/.mcp-auth</code><button class="copy-button" onclick="copyToClipboard(this.previousElementSibling, this)">Copy</button></pre>
+            </div>
         </div>
-    </div>
+    </main>
+
+    <footer class="bg-gray-900 py-6 mt-12">
+        <div class="container mx-auto px-4 text-center text-gray-400">
+            <p>&copy; 2025 Descope Store MCP. All rights reserved.</p>
+            <p class="mt-2">Project ID: ${process.env.DESCOPE_PROJECT_ID || 'Not Set'}</p>
+            <p class="mt-1">Powered by <a href="https://www.descope.com/" class="text-primary hover:underline">@descope/mcp-express</a> + Vercel</p>
+        </div>
+    </footer>
+
+    <script>
+        function copyToClipboard(elementOrId, button) {
+            let text;
+            if (typeof elementOrId === 'string') {
+                text = document.getElementById(elementOrId).textContent;
+            } else {
+                text = elementOrId.textContent;
+            }
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        // Initialize server URL display
+        document.addEventListener('DOMContentLoaded', () => {
+            const serverUrlElement = document.getElementById('server-url');
+            if (serverUrlElement && SERVER_URL) {
+                serverUrlElement.textContent = SERVER_URL;
+            }
+        });
+    </script>
 </body>
 </html>`;
   
