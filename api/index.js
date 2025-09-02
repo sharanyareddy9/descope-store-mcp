@@ -1,12 +1,13 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import axios from "axios";
 import { z } from "zod";
-import { 
-  descopeMcpAuthRouter, 
+import {
+  descopeMcpAuthRouter,
   descopeMcpBearerAuth,
   defineTool,
-  createMcpServerHandler 
+  createMcpServerHandler
 } from "@descope/mcp-express";
 
 const app = express();

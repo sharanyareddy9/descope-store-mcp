@@ -1,0 +1,54 @@
+2025-09-01 22:02:56,449 - splunk_mcp - INFO - 🔧 Logging configured for STDIO mode (level: INFO)
+2025-09-01 22:02:56,449 - splunk_mcp - INFO - 🎛️ Template features enabled by default
+2025-09-01 22:02:56,449 - splunk_mcp - INFO - 📦 Template functionality imported
+2025-09-01 22:02:56,450 - splunk_mcp - INFO - 🔍 Running startup validation for stdio mode...
+2025-09-01 22:02:56,450 - splunk_mcp.validation - INFO - ℹ️ Starting comprehensive validation for stdio mode
+2025-09-01 22:03:36,853 - splunk_mcp.validation - INFO - ℹ️ Validation completed successfully - 16 passed, 3 warnings
+2025-09-01 22:03:36,854 - splunk_mcp - INFO - ✅ Startup validation passed (16 checks)
+2025-09-01 22:03:36,854 - splunk_mcp - WARNING - ⚠️ 3 warnings detected - check logs for details
+2025-09-01 22:03:36,854 - splunk_mcp - INFO - 🚀 Starting Splunk MCP Server v0.0.1 in stdio mode
+2025-09-01 22:03:36,854 - splunk_mcp.connection_manager_factory - INFO - ℹ️ Creating new ConnectionManager instance (single_connection_mode=True)
+2025-09-01 22:03:36,854 - splunk_mcp.connection_manager - INFO - 🔌 Single persistent connection mode enabled (force_single=True, pool_disabled=True)
+2025-09-01 22:03:36,854 - splunk_mcp.connection_manager_factory - INFO - ℹ️ ConnectionManager created successfully (single_connection_mode=True)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: search_splunk (total_tools=1)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: current_user (total_tools=2)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: list_users (total_tools=3)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: health (total_tools=4)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: list_indexes (total_tools=5)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: get_indexes_and_sourcetypes (total_tools=6)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: get_sourcetypes_for_index (total_tools=7)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: list_kvstore_collections (total_tools=8)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: list_saved_searches (total_tools=9)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: ping (total_tools=10)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: create_template (total_tools=11)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: update_template (total_tools=12)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: delete_template (total_tools=13)
+2025-09-01 22:03:36,862 - splunk_mcp.tool_registry - INFO - 🔧 Registry: Registered tool: execute_template_query (total_tools=14)
+2025-09-01 22:03:36,864 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'search_splunk' with complete schema metadata: ['search_query', 'earliest_time', 'latest_time', 'max_results', 'output_mode', 'exec_mode', 'preview', 'timeout']
+2025-09-01 22:03:36,865 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'current_user' with complete schema metadata: []
+2025-09-01 22:03:36,866 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'list_users' with complete schema metadata: []
+2025-09-01 22:03:36,868 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'health' with complete schema metadata: []
+2025-09-01 22:03:36,871 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'list_indexes' with complete schema metadata: []
+2025-09-01 22:03:36,871 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'get_indexes_and_sourcetypes' with complete schema metadata: []
+2025-09-01 22:03:36,873 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'get_sourcetypes_for_index' with complete schema metadata: ['index_name']
+2025-09-01 22:03:36,874 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'list_kvstore_collections' with complete schema metadata: []
+2025-09-01 22:03:36,877 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'list_saved_searches' with complete schema metadata: ['limit', 'offset', 'include_search_query', 'max_query_length', 'name_filter', 'app_filter']
+2025-09-01 22:03:36,877 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'ping' with complete schema metadata: []
+2025-09-01 22:03:36,880 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'create_template' with complete schema metadata: ['name', 'description', 'query_template', 'parameters', 'tags', 'category']
+2025-09-01 22:03:36,881 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'update_template' with complete schema metadata: ['template_id', 'name', 'description', 'query_template', 'parameters', 'tags', 'category']
+2025-09-01 22:03:36,882 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'delete_template' with complete schema metadata: ['template_id']
+2025-09-01 22:03:36,883 - splunk_mcp.splunk_mcp_server - INFO - Registered tool 'execute_template_query' with complete schema metadata: ['template_id', 'parameters', 'earliest_time', 'latest_time', 'max_results']
+2025-09-01 22:03:36,883 - splunk_mcp.splunk_mcp_server - INFO - All tools passed schema validation
+2025-09-01 22:03:36,883 - splunk_mcp.splunk_mcp_server - INFO - Tools registered successfully (tool_count: 14)
+2025-09-01 22:03:36,883 - splunk_mcp.splunk_mcp_server - INFO - Template resources registered successfully
+2025-09-01 22:03:36,885 - splunk_mcp.splunk_mcp_server - INFO - Splunk MCP Server initialized (port: 8000)
+2025-09-01 22:03:36,886 - splunk_mcp.splunk_mcp_server - INFO - 🚀 Starting persistent STDIO MCP server...
+2025-09-01 22:03:36,886 - splunk_mcp.splunk_mcp_server - INFO - 🔍 Process ID: 15569
+2025-09-01 22:03:36,886 - splunk_mcp.splunk_mcp_server - INFO - 🔍 Connection manager: 4617029584
+2025-09-01 22:03:36,886 - splunk_mcp.splunk_mcp_server - INFO - 🔍 Force single connection: True
+2025-09-01 22:03:36,886 - splunk_mcp.splunk_mcp_server - INFO - Accessing internal MCP server from FastMCP
+2025-09-01 22:03:36,886 - splunk_mcp.splunk_mcp_server - INFO - Starting MCP stdio server...
+2025-09-01 22:03:36,891 - splunk_mcp.splunk_mcp_server - INFO - Stdio streams established, running MCP server...
+2025-09-01 22:03:36,901 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-09-01 22:03:36,907 - mcp.server.lowlevel.server - INFO - Processing request of type ListResourcesRequest
+2025-09-01 22:03:36,911 - mcp.server.lowlevel.server - INFO - Processing request of type ListResourceTemplatesRequest
