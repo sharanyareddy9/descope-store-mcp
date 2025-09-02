@@ -26,8 +26,8 @@ app.use(cors({
 // Add Descope MCP Auth Router (OAuth 2.1 endpoints)
 app.use(descopeMcpAuthRouter());
 
-// Apply Descope Bearer Auth to MCP endpoints
-app.use(["/sse", "/message"], descopeMcpBearerAuth());
+// Note: Bearer auth is handled by the MCP handler itself, not as middleware
+// This allows unauthenticated requests to /sse to be redirected to OAuth login
 
 // Define authenticated tools using Descope MCP Express SDK
 const searchProducts = defineTool({
