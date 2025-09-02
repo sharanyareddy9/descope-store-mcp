@@ -1,38 +1,34 @@
 {
-  "version": 2,
-  "routes": [
+  "rewrites": [
     {
-      "src": "/sse",
-      "dest": "/api/index.js"
+      "source": "/sse",
+      "destination": "/api/index"
     },
     {
-      "src": "/message",
-      "dest": "/api/index.js"
+      "source": "/message",
+      "destination": "/api/index"
     },
     {
-      "src": "/.well-known/oauth-authorization-server",
-      "dest": "/api/index.js"
+      "source": "/.well-known/oauth-authorization-server",
+      "destination": "/api/index"
     },
     {
-      "src": "/authorize",
-      "dest": "/api/index.js"
+      "source": "/authorize",
+      "destination": "/api/index"
     },
     {
-      "src": "/register",
-      "dest": "/api/index.js"
+      "source": "/register",
+      "destination": "/api/index"
     },
     {
-      "src": "/health",
-      "dest": "/api/index.js"
+      "source": "/health",
+      "destination": "/api/index"
     },
     {
-      "src": "/(.*)",
-      "dest": "/api/index.js"
+      "source": "/(.*)",
+      "destination": "/api/index"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
   "functions": {
     "api/index.js": {
       "maxDuration": 30
