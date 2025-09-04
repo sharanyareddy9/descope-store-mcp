@@ -27,7 +27,17 @@ app.use(cors({
 
 // Auth middleware - MUST be in this order
 app.use(descopeMcpAuthRouter());
-app.use(["/mcp"], descopeMcpBearerAuth());
+
+// Custom conditional auth middleware for MCP
+app.use(["/mcp"], (req, res, next) => {
+  // Allow initialize method without authentication
+  if (req.body && req.body.method === 'initialize') {
+    return next();
+  }
+  
+  // Require authentication for all other methods (tool calls)
+  return descopeMcpBearerAuth()(req, res, next);
+});
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -43,7 +53,7 @@ server.tool(
     query: z.string().optional().describe("Search query for products"),
     category: z.string().optional().describe("Product category filter (apparel, accessories)")
   },
-  async ({ query, category }, { auth }) => {
+  async ({ query, category }) => {
     try {
       // Fetch products from deployed Descope store
       const response = await axios.get(`${STORE_BASE_URL}/api/products`);
@@ -71,7 +81,7 @@ server.tool(
             query: query,
             category: category,
             products: products,
-            user_scopes: auth?.scopes || []
+            user_scopes: []
           }, null, 2)
         }]
       };
@@ -92,7 +102,7 @@ server.tool(
   {
     product_id: z.string().describe("The product ID to retrieve")
   },
-  async ({ product_id }, { auth }) => {
+  async ({ product_id }) => {
     try {
       // Fetch products from deployed Descope store
       const response = await axios.get(`${STORE_BASE_URL}/api/products`);
@@ -113,7 +123,7 @@ server.tool(
           text: JSON.stringify({
             ...product,
             user_info: {
-              scopes: auth?.scopes || [],
+              scopes: [],
               authenticated_at: new Date().toISOString()
             }
           }, null, 2)
@@ -136,7 +146,7 @@ server.tool(
   {
     product_ids: z.array(z.string()).min(2).max(4).describe("Array of 2-4 product IDs to compare")
   },
-  async ({ product_ids }, { auth }) => {
+  async ({ product_ids }) => {
     try {
       // Fetch products from deployed Descope store
       const response = await axios.get(`${STORE_BASE_URL}/api/products`);
@@ -168,7 +178,7 @@ server.tool(
           reason: "Based on availability and features"
         } : null,
         auth_info: {
-          scopes: auth?.scopes || [],
+          scopes: [],
           comparison_time: new Date().toISOString()
         }
       };
@@ -194,7 +204,7 @@ server.tool(
   "get_store_info",
   "Get general information about the Descope authentication store",
   {},
-  async (args, { auth }) => {
+  async (args) => {
     const storeInfo = {
       store_name: "Descope Authentication Store",
       description: "Premium authentication-themed merchandise and apparel",
@@ -209,7 +219,7 @@ server.tool(
         mcp_version: "2025-03-26",
         auth_provider: "Descope OAuth 2.1",
         deployment: "Vercel Serverless",
-        user_scopes: auth?.scopes || []
+        user_scopes: []
       }
     };
 
