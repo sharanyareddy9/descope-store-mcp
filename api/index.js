@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import { z } from "zod";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   descopeMcpAuthRouter,
   descopeMcpBearerAuth,
@@ -228,44 +229,59 @@ const getStoreInfo = defineTool({
 });
 
 // Create MCP server handler with all tools
-const mcpHandler = createMcpServerHandler([
+const { server } = createMcpServerHandler([
   searchProducts,
   getProduct,
   compareProducts,
   getStoreInfo
 ]);
 
-// Custom authentication middleware for /sse endpoint
-// Returns 401 Unauthorized for unauthenticated requests (like weather MCP server)
-app.use('/sse', (req, res, next) => {
-  // Check if this is an unauthenticated request (no Authorization header)
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // For browser requests, still redirect to OAuth login for user convenience
-    if (req.headers.accept && req.headers.accept.includes('text/html')) {
-      // Always use HTTPS for redirect URI (Vercel always serves over HTTPS)
-      const redirectUri = `https://${req.get('host')}${req.originalUrl}`;
-      const redirectUrl = `https://app.descope.com/oauth2/v1/authorize?response_type=code&client_id=${process.env.DESCOPE_PROJECT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=store:read&state=oauth_state`;
-      return res.redirect(redirectUrl);
-    }
-    
-    // For MCP clients and API requests, return 401 with proper WWW-Authenticate header
-    res.set('WWW-Authenticate', 'Bearer error="invalid_token", error_description="Missing Authorization header"');
-    res.set('Content-Type', 'application/json');
-    return res.status(401).json({
-      error: "invalid_token",
-      error_description: "Missing Authorization header"
-    });
-  }
-  
-  // If authenticated, proceed to MCP handler
-  next();
+// Initialize transport
+const transport = new StreamableHTTPServerTransport({
+  sessionIdGenerator: undefined, // set to undefined for stateless servers
 });
 
-// Mount MCP handler on protected routes
-app.use('/sse', mcpHandler);
-app.use('/message', mcpHandler);
+// Auth middleware - following Express MCP example pattern
+app.use(["/mcp"], descopeMcpBearerAuth());
+
+// MCP endpoint
+app.post('/mcp', async (req, res) => {
+  console.log('Received MCP request:', req.body);
+  try {
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('Error handling MCP request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal server error',
+        },
+        id: null,
+      });
+    }
+  }
+});
+
+// Method not allowed handlers
+const methodNotAllowed = (req, res) => {
+  console.log(`Received ${req.method} MCP request`);
+  res.status(405).json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed."
+    },
+    id: null
+  });
+};
+
+app.get('/mcp', methodNotAllowed);
+app.delete('/mcp', methodNotAllowed);
+
+// Connect server to transport
+server.connect(transport);
 
 // Public endpoints
 app.get('/', (req, res) => {
@@ -277,7 +293,7 @@ app.get('/', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Descope Store MCP Server</title>
     <script>
-        const SERVER_URL = '${SERVER_URL}/sse';
+        const SERVER_URL = '${SERVER_URL}/mcp';
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -383,7 +399,7 @@ app.get('/', (req, res) => {
                 <div class="space-y-6">
                     <div>
                         <h3 class="text-xl font-semibold text-white mb-3">Server URL</h3>
-                        <pre class="relative"><code id="server-url">${SERVER_URL}/sse</code><button class="copy-button" onclick="copyToClipboard('server-url', this)">Copy</button></pre>
+                        <pre class="relative"><code id="server-url">${SERVER_URL}/mcp</code><button class="copy-button" onclick="copyToClipboard('server-url', this)">Copy</button></pre>
                     </div>
 
                     <div>
@@ -394,7 +410,7 @@ app.get('/', (req, res) => {
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-remote",
-        "${SERVER_URL}/sse"
+        "${SERVER_URL}/mcp"
       ]
     }
   }
@@ -536,8 +552,7 @@ app.get('/health', (req, res) => {
     auth: 'Descope OAuth 2.1',
     deployment: 'Vercel Serverless',
     endpoints: {
-      sse: `${SERVER_URL}/sse`,
-      message: `${SERVER_URL}/message`,
+      mcp: `${SERVER_URL}/mcp`,
       oauth_metadata: `${SERVER_URL}/.well-known/oauth-authorization-server`
     },
     timestamp: new Date().toISOString()
@@ -592,8 +607,7 @@ app.get('/.well-known/mcp-server', (req, res) => {
     version: '1.0.0',
     mcp_version: '2025-03-26',
     endpoints: {
-      sse: `${SERVER_URL}/sse`,
-      message: `${SERVER_URL}/message`
+      mcp: `${SERVER_URL}/mcp`
     },
     auth: {
       type: 'oauth2',
