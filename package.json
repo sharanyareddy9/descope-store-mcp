@@ -1,19 +1,16 @@
 {
-  "name": "descope-store-mcp",
+  "name": "descope-store-mcp-v2",
   "version": "1.0.0",
-  "description": "Descope Store MCP Server with OAuth 2.1 authentication",
-  "type": "module",
+  "description": "Clean Descope Store MCP Server with OAuth 2.1 authentication",
   "main": "api/index.js",
+  "type": "module",
   "scripts": {
-    "dev": "node descope-mcp-server.js",
-    "start": "node api/index.js",
-    "build": "echo 'No build step required'",
-    "vercel-build": "echo 'No build step required'"
+    "dev": "node api/index.js",
+    "start": "node api/index.js"
   },
   "dependencies": {
-    "@vercel/mcp-adapter": "^1.0.0",
+    "hono": "^4.6.11",
     "@descope/node-sdk": "^1.0.0",
-    "axios": "^1.7.9",
     "zod": "^3.24.1",
     "dotenv": "^16.4.7"
   },
@@ -25,10 +22,8 @@
     "descope",
     "oauth",
     "authentication",
-    "claude",
-    "ai",
-    "vercel"
+    "user-management"
   ],
-  "author": "Your Name",
+  "author": "Descope Store MCP",
   "license": "MIT"
 }
