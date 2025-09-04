@@ -11,10 +11,8 @@
     "vercel-build": "echo 'No build step required'"
   },
   "dependencies": {
-    "@descope/mcp-express": "^1.4.0",
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "express": "^4.21.2",
-    "cors": "^2.8.5",
+    "@vercel/mcp-adapter": "^1.0.0",
+    "@descope/node-sdk": "^1.0.0",
     "axios": "^1.7.9",
     "zod": "^3.24.1",
     "dotenv": "^16.4.7"

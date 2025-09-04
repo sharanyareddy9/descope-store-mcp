@@ -1,582 +1,473 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import axios from "axios";
-import { z } from "zod";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { descopeMcpAuthRouter, descopeMcpBearerAuth } from "@descope/mcp-express";
+import { createMcpHandler } from '@vercel/mcp-adapter';
+import DescopeClient from '@descope/node-sdk';
+import { z } from 'zod';
+import axios from 'axios';
 
-const app = express();
+// Initialize Descope client
+const descopeClient = DescopeClient({
+  projectId: process.env.DESCOPE_PROJECT_ID,
+  managementKey: process.env.DESCOPE_MANAGEMENT_KEY,
+});
 
-// Environment variables for Vercel
-const STORE_BASE_URL = process.env.DESCOPE_STORE_URL || 'https://descope-store.vercel.app';
-// Use production URL instead of preview URL for consistent domain
-const SERVER_URL = process.env.NODE_ENV === 'production'
-  ? 'https://descope-store-mcp.vercel.app'
-  : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://localhost:3443');
+// Validation schemas
+const UserSchema = z.object({
+  loginId: z.string(),
+  email: z.string().email().optional(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  picture: z.string().url().optional(),
+  customAttributes: z.record(z.any()).optional(),
+});
 
-// Middleware
-app.use(express.json());
-app.use(cors({
-  origin: '*',
-  credentials: true,
-  methods: '*',
-  allowedHeaders: 'Authorization, Origin, Content-Type, Accept, mcp-protocol-version, *',
-}));
+const CreateUserSchema = z.object({
+  loginId: z.string(),
+  email: z.string().email().optional(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  password: z.string().optional(),
+  customAttributes: z.record(z.any()).optional(),
+});
 
-// Auth middleware - MUST be in this order
-app.use(descopeMcpAuthRouter());
-// Note: Bearer auth will be handled conditionally in the MCP endpoint
+const UpdateUserSchema = z.object({
+  loginId: z.string(),
+  email: z.string().email().optional(),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  customAttributes: z.record(z.any()).optional(),
+});
 
-// Test endpoint without any auth to debug
-app.post('/mcp-test', async (req, res) => {
-  console.log('Received MCP test request:', req.body);
+// Custom token verification function
+async function verifyToken(token) {
   try {
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error('Error handling MCP test request:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal server error',
-        },
-        id: null,
-      });
+    // Verify the JWT token with Descope
+    const authInfo = await descopeClient.validateJwt(token);
+    
+    if (!authInfo.valid) {
+      throw new Error('Invalid token');
     }
-  }
-});
-
-// Initialize MCP Server
-const server = new McpServer({
-  name: "Descope Store MCP Server",
-  version: "1.0.0",
-});
-
-// Define MCP tools
-server.tool(
-  "search_products",
-  "Search for Descope authentication products in the store",
-  {
-    query: z.string().optional().describe("Search query for products"),
-    category: z.string().optional().describe("Product category filter (apparel, accessories)")
-  },
-  async ({ query, category }) => {
-    try {
-      // Fetch products from deployed Descope store
-      const response = await axios.get(`${STORE_BASE_URL}/api/products`);
-      let products = response.data;
-
-      // Apply search filters
-      if (query) {
-        products = products.filter(p => 
-          p.title.toLowerCase().includes(query.toLowerCase()) ||
-          p.description.toLowerCase().includes(query.toLowerCase())
-        );
-      }
-
-      if (category) {
-        products = products.filter(p => 
-          p.product_type.toLowerCase() === category.toLowerCase()
-        );
-      }
-
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            found: products.length,
-            query: query,
-            category: category,
-            products: products,
-            user_scopes: []
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: "text", 
-          text: `Error searching products: ${error.message}`
-        }]
-      };
-    }
-  }
-);
-
-server.tool(
-  "get_product",
-  "Get detailed information about a specific Descope store product",
-  {
-    product_id: z.string().describe("The product ID to retrieve")
-  },
-  async ({ product_id }) => {
-    try {
-      // Fetch products from deployed Descope store
-      const response = await axios.get(`${STORE_BASE_URL}/api/products`);
-      const product = response.data.find(p => p.id === product_id);
-      
-      if (!product) {
-        return {
-          content: [{
-            type: "text",
-            text: `Product with ID "${product_id}" not found`
-          }]
-        };
-      }
-
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            ...product,
-            user_info: {
-              scopes: [],
-              authenticated_at: new Date().toISOString()
-            }
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: "text",
-          text: `Error fetching product: ${error.message}`
-        }]
-      };
-    }
-  }
-);
-
-server.tool(
-  "compare_products", 
-  "Compare multiple Descope store products side by side",
-  {
-    product_ids: z.array(z.string()).min(2).max(4).describe("Array of 2-4 product IDs to compare")
-  },
-  async ({ product_ids }) => {
-    try {
-      // Fetch products from deployed Descope store
-      const response = await axios.get(`${STORE_BASE_URL}/api/products`);
-      const products = response.data.filter(p => product_ids.includes(p.id));
-      
-      if (products.length === 0) {
-        return {
-          content: [{
-            type: "text",
-            text: "No products found with the provided IDs"
-          }]
-        };
-      }
-
-      const comparison = {
-        total_compared: products.length,
-        requested_ids: product_ids,
-        comparison: products.map(p => ({
-          id: p.id,
-          title: p.title,
-          price: p.price,
-          product_type: p.product_type,
-          description: p.description.substring(0, 100) + '...',
-          image_url: p.image_url,
-          variant_count: p.variants.length
-        })),
-        recommendation: products.length > 0 ? {
-          top_pick: products[0].title,
-          reason: "Based on availability and features"
-        } : null,
-        auth_info: {
-          scopes: [],
-          comparison_time: new Date().toISOString()
-        }
-      };
-
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify(comparison, null, 2)
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: "text",
-          text: `Error comparing products: ${error.message}`
-        }]
-      };
-    }
-  }
-);
-
-server.tool(
-  "get_store_info",
-  "Get general information about the Descope authentication store",
-  {},
-  async (args) => {
-    const storeInfo = {
-      store_name: "Descope Authentication Store",
-      description: "Premium authentication-themed merchandise and apparel",
-      total_products: 2,
-      categories: ["apparel"],
-      total_variants: 2,
-      featured_products: [
-        { id: "1", title: "Multi-Factor Authentication T-Shirt", price: "$29.99" },
-        { id: "2", title: "Passwordless Login Hoodie", price: "$59.99" }
-      ],
-      server_info: {
-        mcp_version: "2025-03-26",
-        auth_provider: "Descope OAuth 2.1",
-        deployment: "Vercel Serverless",
-        user_scopes: []
-      }
-    };
 
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify(storeInfo, null, 2)
-      }]
+      valid: true,
+      claims: authInfo.claims,
+      userId: authInfo.claims.sub,
+      permissions: authInfo.claims.permissions || [],
+      roles: authInfo.claims.roles || [],
+    };
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return {
+      valid: false,
+      error: error.message,
     };
   }
-);
+}
 
-// Initialize transport
-const transport = new StreamableHTTPServerTransport({
-  sessionIdGenerator: undefined, // set to undefined for stateless servers
-});
-
-// MCP endpoint - MUST be POST with conditional authentication
-app.post('/mcp', async (req, res) => {
-  console.log('Received MCP request:', req.body);
+// Create MCP handler with Descope authentication
+const handler = createMcpHandler({
+  name: 'descope-store-mcp',
+  version: '1.0.0',
+  description: 'Descope Store MCP Server - User management with OAuth 2.1 authentication',
   
-  // Allow initialize method without authentication
-  if (req.body && req.body.method === 'initialize') {
-    try {
-      await transport.handleRequest(req, res, req.body);
-    } catch (error) {
-      console.error('Error handling MCP initialize request:', error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32603,
-            message: 'Internal server error',
-          },
-          id: null,
-        });
-      }
+  // Custom authentication function
+  async authenticate(request) {
+    const authHeader = request.headers.get('authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return { authenticated: false, error: 'Missing or invalid authorization header' };
     }
-    return;
-  }
-  
-  // For all other methods, require authentication
-  descopeMcpBearerAuth()(req, res, async () => {
-    try {
-      await transport.handleRequest(req, res, req.body);
-    } catch (error) {
-      console.error('Error handling authenticated MCP request:', error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32603,
-            message: 'Internal server error',
-          },
-          id: null,
-        });
-      }
-    }
-  });
-});
 
-// Method not allowed handlers
-const methodNotAllowed = (req, res) => {
-  console.log(`Received ${req.method} MCP request`);
-  res.status(405).json({
-    jsonrpc: "2.0",
-    error: {
-      code: -32000,
-      message: "Method not allowed."
+    const token = authHeader.substring(7);
+    const verification = await verifyToken(token);
+    
+    if (!verification.valid) {
+      return { authenticated: false, error: verification.error || 'Token verification failed' };
+    }
+
+    return {
+      authenticated: true,
+      user: {
+        id: verification.userId,
+        claims: verification.claims,
+        permissions: verification.permissions,
+        roles: verification.roles,
+      },
+    };
+  },
+
+  // Define available tools
+  tools: {
+    list_users: {
+      description: 'List all users in the Descope project',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: 'Maximum number of users to return (default: 100)',
+            minimum: 1,
+            maximum: 1000,
+          },
+          page: {
+            type: 'number',
+            description: 'Page number for pagination (default: 0)',
+            minimum: 0,
+          },
+        },
+      },
+      handler: async (args, context) => {
+        try {
+          const limit = args.limit || 100;
+          const page = args.page || 0;
+          
+          const response = await descopeClient.management.user.searchAll({
+            limit,
+            page,
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                users: response.users || [],
+                totalUsers: response.totalUsers || 0,
+                page,
+                limit,
+                hasMore: (response.users?.length || 0) === limit,
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Error listing users: ${error.message}`,
+            }],
+            isError: true,
+          };
+        }
+      },
     },
-    id: null
-  });
-};
 
-app.get('/mcp', methodNotAllowed);
-app.delete('/mcp', methodNotAllowed);
+    get_user: {
+      description: 'Get a specific user by login ID',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          loginId: {
+            type: 'string',
+            description: 'The login ID of the user to retrieve',
+          },
+        },
+        required: ['loginId'],
+      },
+      handler: async (args, context) => {
+        try {
+          const { loginId } = args;
+          const user = await descopeClient.management.user.load(loginId);
 
-// Public endpoints
-app.get('/', (req, res) => {
-  const homePage = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Descope Store MCP Server</title>
-    <script>
-        const SERVER_URL = '${SERVER_URL}/mcp';
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: "#7deded", // Teal
-                        secondary: "#6366F1", // Indigo
-                        accent: "#EC4899", // Pink
-                        dark: {
-                            DEFAULT: "#111827",
-                            lighter: "#1F2937",
-                        }
-                    },
-                    fontFamily: {
-                        sans: ["Inter", "system-ui", "sans-serif"],
-                        heading: ["Space Grotesk", "system-ui", "sans-serif"],
-                    },
-                },
-            },
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(user, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Error getting user: ${error.message}`,
+            }],
+            isError: true,
+          };
+        }
+      },
+    },
+
+    create_user: {
+      description: 'Create a new user in the Descope project',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          loginId: {
+            type: 'string',
+            description: 'Unique login ID for the user',
+          },
+          email: {
+            type: 'string',
+            format: 'email',
+            description: 'User email address',
+          },
+          name: {
+            type: 'string',
+            description: 'User display name',
+          },
+          phone: {
+            type: 'string',
+            description: 'User phone number',
+          },
+          password: {
+            type: 'string',
+            description: 'User password (optional)',
+          },
+          customAttributes: {
+            type: 'object',
+            description: 'Custom user attributes',
+          },
+        },
+        required: ['loginId'],
+      },
+      handler: async (args, context) => {
+        try {
+          const validatedData = CreateUserSchema.parse(args);
+          
+          const user = await descopeClient.management.user.create(
+            validatedData.loginId,
+            {
+              email: validatedData.email,
+              name: validatedData.name,
+              phone: validatedData.phone,
+              password: validatedData.password,
+              customAttributes: validatedData.customAttributes,
+            }
+          );
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: 'User created successfully',
+                user,
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Error creating user: ${error.message}`,
+            }],
+            isError: true,
+          };
+        }
+      },
+    },
+
+    update_user: {
+      description: 'Update an existing user',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          loginId: {
+            type: 'string',
+            description: 'Login ID of the user to update',
+          },
+          email: {
+            type: 'string',
+            format: 'email',
+            description: 'Updated email address',
+          },
+          name: {
+            type: 'string',
+            description: 'Updated display name',
+          },
+          phone: {
+            type: 'string',
+            description: 'Updated phone number',
+          },
+          customAttributes: {
+            type: 'object',
+            description: 'Updated custom attributes',
+          },
+        },
+        required: ['loginId'],
+      },
+      handler: async (args, context) => {
+        try {
+          const validatedData = UpdateUserSchema.parse(args);
+          
+          const user = await descopeClient.management.user.update(
+            validatedData.loginId,
+            {
+              email: validatedData.email,
+              name: validatedData.name,
+              phone: validatedData.phone,
+              customAttributes: validatedData.customAttributes,
+            }
+          );
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: 'User updated successfully',
+                user,
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Error updating user: ${error.message}`,
+            }],
+            isError: true,
+          };
+        }
+      },
+    },
+
+    delete_user: {
+      description: 'Delete a user from the Descope project',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          loginId: {
+            type: 'string',
+            description: 'Login ID of the user to delete',
+          },
+        },
+        required: ['loginId'],
+      },
+      handler: async (args, context) => {
+        try {
+          const { loginId } = args;
+          await descopeClient.management.user.delete(loginId);
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `User ${loginId} deleted successfully`,
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Error deleting user: ${error.message}`,
+            }],
+            isError: true,
+          };
+        }
+      },
+    },
+
+    get_oauth_urls: {
+      description: 'Get OAuth 2.1 authorization and token URLs for authentication',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async (args, context) => {
+        try {
+          const baseUrl = process.env.SERVER_URL || 'https://descope-store-mcp.vercel.app';
+          const projectId = process.env.DESCOPE_PROJECT_ID;
+          
+          const authUrl = `https://api.descope.com/v1/oauth2/authorize?` +
+            `response_type=code&` +
+            `client_id=${projectId}&` +
+            `redirect_uri=${encodeURIComponent(baseUrl + '/auth/callback')}&` +
+            `scope=openid profile email&` +
+            `state=mcp_auth`;
+
+          const tokenUrl = `https://api.descope.com/v1/oauth2/token`;
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                authorization_endpoint: authUrl,
+                token_endpoint: tokenUrl,
+                redirect_uri: baseUrl + '/auth/callback',
+                client_id: projectId,
+                scope: 'openid profile email',
+                response_type: 'code',
+                grant_type: 'authorization_code',
+                instructions: [
+                  '1. Visit the authorization_endpoint URL to get an authorization code',
+                  '2. Exchange the code for an access token using the token_endpoint',
+                  '3. Use the access token as Bearer token in MCP requests',
+                ],
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Error getting OAuth URLs: ${error.message}`,
+            }],
+            isError: true,
+          };
+        }
+      },
+    },
+  },
+
+  // Define available resources
+  resources: {
+    'descope://users': {
+      description: 'Access to user data and management',
+      mimeType: 'application/json',
+      handler: async (uri, context) => {
+        try {
+          const response = await descopeClient.management.user.searchAll({
+            limit: 100,
+            page: 0,
+          });
+
+          return {
+            contents: [{
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify({
+                users: response.users || [],
+                totalUsers: response.totalUsers || 0,
+                timestamp: new Date().toISOString(),
+              }, null, 2),
+            }],
+          };
+        } catch (error) {
+          throw new Error(`Failed to load users resource: ${error.message}`);
+        }
+      },
+    },
+
+    'descope://config': {
+      description: 'Server configuration and OAuth endpoints',
+      mimeType: 'application/json',
+      handler: async (uri, context) => {
+        const baseUrl = process.env.SERVER_URL || 'https://descope-store-mcp.vercel.app';
+        const projectId = process.env.DESCOPE_PROJECT_ID;
+
+        return {
+          contents: [{
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify({
+              server_url: baseUrl,
+              project_id: projectId,
+              oauth: {
+                authorization_endpoint: `https://api.descope.com/v1/oauth2/authorize`,
+                token_endpoint: `https://api.descope.com/v1/oauth2/token`,
+                redirect_uri: baseUrl + '/auth/callback',
+                scope: 'openid profile email',
+              },
+              mcp: {
+                name: 'descope-store-mcp',
+                version: '1.0.0',
+                description: 'Descope Store MCP Server - User management with OAuth 2.1 authentication',
+              },
+            }, null, 2),
+          }],
         };
-    </script>
-    <style>
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
-
-        body {
-            background-color: #111827;
-            color: #F3F4F6;
-        }
-
-        pre {
-            background: #1F2937 !important;
-            color: #E5E7EB !important;
-            position: relative;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            word-break: break-word;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin: 0.5rem 0;
-            border: 1px solid #374151;
-        }
-
-        .card {
-            background: #1F2937;
-            border: 1px solid #374151;
-        }
-
-        .copy-button {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            background: #374151;
-            color: #9CA3AF;
-            border: none;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .copy-button:hover {
-            background: #4B5563;
-            color: #F3F4F6;
-        }
-
-        .copy-button.copied {
-            background: #059669;
-            color: white;
-        }
-    </style>
-</head>
-<body class="dark">
-    <main class="container mx-auto px-4 py-8 max-w-4xl">
-        <div class="text-center mb-12">
-            <h1 class="text-5xl font-bold font-heading text-white mb-4">
-                🔐 Descope Store MCP
-            </h1>
-            <p class="text-xl text-gray-300 mb-6">
-                Model Context Protocol Server with OAuth 2.1 Authentication
-            </p>
-            <div class="inline-flex items-center bg-green-600 text-white px-4 py-2 rounded-full text-sm font-medium">
-                ✨ Deployed on Vercel
-            </div>
-        </div>
-
-        <div class="grid gap-8">
-            <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-bold font-heading text-white mb-4">About</h2>
-                <p class="text-gray-300 mb-4">
-                    This MCP server provides authenticated access to the Descope Authentication Store,
-                    featuring premium authentication-themed merchandise and apparel. The server uses
-                    <a href="https://www.descope.com/" class="text-primary hover:underline">Descope</a>
-                    OAuth 2.1 for secure authentication and authorization.
-                </p>
-            </div>
-
-            <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-bold font-heading text-white mb-4">Quick Start</h2>
-                <div class="space-y-6">
-                    <div>
-                        <h3 class="text-xl font-semibold text-white mb-3">Server URL</h3>
-                        <pre class="relative"><code id="server-url">${SERVER_URL}/mcp</code><button class="copy-button" onclick="copyToClipboard('server-url', this)">Copy</button></pre>
-                    </div>
-
-                    <div>
-                        <h3 class="text-xl font-semibold text-white mb-3">Configuration</h3>
-                        <pre class="relative"><code id="config-json">{
-  "mcpServers": {
-    "descope-store": {
-      "command": "npx",
-      "args": [
-        "@modelcontextprotocol/server-remote",
-        "${SERVER_URL}/mcp"
-      ]
-    }
-  }
-}</code><button class="copy-button" onclick="copyToClipboard('config-json', this)">Copy</button></pre>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-bold font-heading text-white mb-4">Available Tools</h2>
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div class="bg-gray-800 p-4 rounded-lg">
-                        <h4 class="font-semibold text-white mb-2">search_products</h4>
-                        <p class="text-gray-300 text-sm">Search for Descope store products by query and category</p>
-                    </div>
-                    <div class="bg-gray-800 p-4 rounded-lg">
-                        <h4 class="font-semibold text-white mb-2">get_product</h4>
-                        <p class="text-gray-300 text-sm">Get detailed information about a specific product</p>
-                    </div>
-                    <div class="bg-gray-800 p-4 rounded-lg">
-                        <h4 class="font-semibold text-white mb-2">compare_products</h4>
-                        <p class="text-gray-300 text-sm">Compare multiple products side by side</p>
-                    </div>
-                    <div class="bg-gray-800 p-4 rounded-lg">
-                        <h4 class="font-semibold text-white mb-2">get_store_info</h4>
-                        <p class="text-gray-300 text-sm">Get general store information and statistics</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-bold font-heading text-white mb-4">Authentication</h2>
-                <div class="space-y-4">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span class="text-gray-300">OAuth 2.1 compliant with PKCE</span>
-                    </div>
-                    <div class="flex items-center space-x-3">
-                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span class="text-gray-300">Scope-based access control</span>
-                    </div>
-                    <div class="flex items-center space-x-3">
-                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span class="text-gray-300">Bearer token authentication</span>
-                    </div>
-                    <div class="flex items-center space-x-3">
-                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span class="text-gray-300">Secure Descope integration</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <footer class="bg-gray-900 py-6 mt-12">
-        <div class="container mx-auto px-4 text-center text-gray-400">
-            <p>&copy; 2025 Descope Store MCP. All rights reserved.</p>
-            <p class="mt-2">Project ID: ${process.env.DESCOPE_PROJECT_ID || 'Not Set'}</p>
-            <p class="mt-1">Powered by <a href="https://www.descope.com/" class="text-primary hover:underline">@descope/mcp-express</a> + Vercel</p>
-        </div>
-    </footer>
-
-    <script>
-        function copyToClipboard(elementOrId, button) {
-            let text;
-            if (typeof elementOrId === 'string') {
-                text = document.getElementById(elementOrId).textContent;
-            } else {
-                text = elementOrId.textContent;
-            }
-            
-            navigator.clipboard.writeText(text).then(() => {
-                const originalText = button.textContent;
-                button.textContent = 'Copied!';
-                button.classList.add('copied');
-                
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-            });
-        }
-
-        // Initialize server URL display
-        document.addEventListener('DOMContentLoaded', () => {
-            const serverUrlElement = document.getElementById('server-url');
-            if (serverUrlElement && SERVER_URL) {
-                serverUrlElement.textContent = SERVER_URL;
-            }
-        });
-    </script>
-</body>
-</html>`;
-  
-  res.send(homePage);
-});
-
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    server: 'Descope Store MCP Server',
-    version: '1.0.0',
-    mcp_version: '2025-03-26',
-    auth: 'Descope OAuth 2.1',
-    deployment: 'Vercel Serverless',
-    endpoints: {
-      mcp: `${SERVER_URL}/mcp`,
-      oauth_metadata: `${SERVER_URL}/.well-known/oauth-authorization-server`
+      },
     },
-    timestamp: new Date().toISOString()
-  });
+  },
 });
 
-// Favicon endpoint to prevent 404 errors in Claude Web
-app.get('/favicon.ico', (req, res) => {
-  // Return a simple 1x1 transparent PNG
-  const transparentPng = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg==',
-    'base64'
-  );
-  res.set('Content-Type', 'image/png');
-  res.set('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
-  res.send(transparentPng);
-});
-
-// Server setup for Vercel
-const setupServer = async () => {
-  try {
-    await server.connect(transport);
-    console.log('MCP Server connected successfully');
-  } catch (error) {
-    console.error('Failed to set up the MCP server:', error);
-    throw error;
-  }
-};
-
-// Initialize server connection
-setupServer().catch(error => {
-  console.error('Failed to start MCP server:', error);
-});
-
-// Export for Vercel
-export default app;
+export default handler;
