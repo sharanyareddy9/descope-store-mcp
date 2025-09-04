@@ -29,6 +29,26 @@ app.use(cors({
 app.use(descopeMcpAuthRouter());
 // Note: Bearer auth will be handled conditionally in the MCP endpoint
 
+// Test endpoint without any auth to debug
+app.post('/mcp-test', async (req, res) => {
+  console.log('Received MCP test request:', req.body);
+  try {
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('Error handling MCP test request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal server error',
+        },
+        id: null,
+      });
+    }
+  }
+});
+
 // Initialize MCP Server
 const server = new McpServer({
   name: "Descope Store MCP Server",
