@@ -27,17 +27,7 @@ app.use(cors({
 
 // Auth middleware - MUST be in this order
 app.use(descopeMcpAuthRouter());
-
-// Custom conditional auth middleware for MCP
-app.use(["/mcp"], (req, res, next) => {
-  // Allow initialize method without authentication
-  if (req.body && req.body.method === 'initialize') {
-    return next();
-  }
-  
-  // Require authentication for all other methods (tool calls)
-  return descopeMcpBearerAuth()(req, res, next);
-});
+// Note: Bearer auth will be handled conditionally in the MCP endpoint
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -237,24 +227,48 @@ const transport = new StreamableHTTPServerTransport({
   sessionIdGenerator: undefined, // set to undefined for stateless servers
 });
 
-// MCP endpoint - MUST be POST
+// MCP endpoint - MUST be POST with conditional authentication
 app.post('/mcp', async (req, res) => {
   console.log('Received MCP request:', req.body);
-  try {
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error('Error handling MCP request:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal server error',
-        },
-        id: null,
-      });
+  
+  // Allow initialize method without authentication
+  if (req.body && req.body.method === 'initialize') {
+    try {
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error('Error handling MCP initialize request:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal server error',
+          },
+          id: null,
+        });
+      }
     }
+    return;
   }
+  
+  // For all other methods, require authentication
+  descopeMcpBearerAuth()(req, res, async () => {
+    try {
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error('Error handling authenticated MCP request:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal server error',
+          },
+          id: null,
+        });
+      }
+    }
+  });
 });
 
 // Method not allowed handlers
