@@ -8,15 +8,20 @@ const DESCOPE_PROJECT_ID = process.env.DESCOPE_PROJECT_ID;
 const DESCOPE_MANAGEMENT_KEY = process.env.DESCOPE_MANAGEMENT_KEY;
 const SERVER_URL = process.env.SERVER_URL || 'https://descope-store-mcp.vercel.app';
 
-if (!DESCOPE_PROJECT_ID || !DESCOPE_MANAGEMENT_KEY) {
-  console.error('Missing required environment variables: DESCOPE_PROJECT_ID, DESCOPE_MANAGEMENT_KEY');
+// Initialize Descope client only if environment variables are available
+let descopeClient = null;
+if (DESCOPE_PROJECT_ID && DESCOPE_MANAGEMENT_KEY) {
+  try {
+    descopeClient = DescopeClient({
+      projectId: DESCOPE_PROJECT_ID,
+      managementKey: DESCOPE_MANAGEMENT_KEY
+    });
+  } catch (error) {
+    console.error('Failed to initialize Descope client:', error);
+  }
+} else {
+  console.warn('Missing environment variables: DESCOPE_PROJECT_ID, DESCOPE_MANAGEMENT_KEY');
 }
-
-// Initialize Descope client
-const descopeClient = DescopeClient({ 
-  projectId: DESCOPE_PROJECT_ID,
-  managementKey: DESCOPE_MANAGEMENT_KEY
-});
 
 const app = new Hono();
 
@@ -52,6 +57,14 @@ app.get('/', (c) => {
 
 // MCP Server-Sent Events endpoint
 app.get('/mcp', async (c) => {
+  // Check if Descope client is available
+  if (!descopeClient) {
+    return c.json({
+      error: 'Server configuration error',
+      message: 'Descope client not initialized. Please check environment variables.'
+    }, 500);
+  }
+
   const authHeader = c.req.header('Authorization');
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -109,6 +122,13 @@ app.get('/mcp', async (c) => {
 
 // OAuth Authorization endpoint
 app.get('/oauth/authorize', (c) => {
+  if (!DESCOPE_PROJECT_ID) {
+    return c.json({
+      error: 'Server configuration error',
+      message: 'DESCOPE_PROJECT_ID not configured'
+    }, 500);
+  }
+
   const clientId = c.req.query('client_id');
   const redirectUri = c.req.query('redirect_uri');
   const state = c.req.query('state');
@@ -134,6 +154,13 @@ app.get('/oauth/authorize', (c) => {
 
 // OAuth Token endpoint
 app.post('/oauth/token', async (c) => {
+  if (!DESCOPE_PROJECT_ID) {
+    return c.json({
+      error: 'Server configuration error',
+      message: 'DESCOPE_PROJECT_ID not configured'
+    }, 500);
+  }
+
   try {
     const body = await c.req.json();
     const { code, client_id, redirect_uri, code_verifier } = body;
