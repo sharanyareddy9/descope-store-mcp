@@ -600,5 +600,17 @@ app.get('/mcp/capabilities', (req, res) => {
   res.redirect('/.well-known/mcp-capabilities');
 });
 
+// Favicon endpoint to prevent 404 errors in Claude Web
+app.get('/favicon.ico', (req, res) => {
+  // Return a simple 1x1 transparent PNG
+  const transparentPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+  res.send(transparentPng);
+});
+
 // Export for Vercel
 export default app;
