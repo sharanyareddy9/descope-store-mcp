@@ -10,9 +10,7 @@
     "build": "echo 'No build step required for serverless functions'"
   },
   "dependencies": {
-    "hono": "^4.6.11",
     "@descope/node-sdk": "^1.0.0",
-    "zod": "^3.24.1",
     "dotenv": "^16.4.7"
   },
   "engines": {
