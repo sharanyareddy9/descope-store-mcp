@@ -3,7 +3,6 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import { z } from "zod";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   descopeMcpAuthRouter,
   descopeMcpBearerAuth,
@@ -229,59 +228,18 @@ const getStoreInfo = defineTool({
 });
 
 // Create MCP server handler with all tools
-const { server } = createMcpServerHandler([
+const mcpHandler = createMcpServerHandler([
   searchProducts,
   getProduct,
   compareProducts,
   getStoreInfo
 ]);
 
-// Initialize transport
-const transport = new StreamableHTTPServerTransport({
-  sessionIdGenerator: undefined, // set to undefined for stateless servers
-});
-
-// Auth middleware - following Express MCP example pattern
+// Auth middleware - use descopeMcpBearerAuth on /mcp routes
 app.use(["/mcp"], descopeMcpBearerAuth());
 
-// MCP endpoint
-app.post('/mcp', async (req, res) => {
-  console.log('Received MCP request:', req.body);
-  try {
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error('Error handling MCP request:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal server error',
-        },
-        id: null,
-      });
-    }
-  }
-});
-
-// Method not allowed handlers
-const methodNotAllowed = (req, res) => {
-  console.log(`Received ${req.method} MCP request`);
-  res.status(405).json({
-    jsonrpc: "2.0",
-    error: {
-      code: -32000,
-      message: "Method not allowed."
-    },
-    id: null
-  });
-};
-
-app.get('/mcp', methodNotAllowed);
-app.delete('/mcp', methodNotAllowed);
-
-// Connect server to transport
-server.connect(transport);
+// Mount MCP handler on /mcp route
+app.use('/mcp', mcpHandler);
 
 // Public endpoints
 app.get('/', (req, res) => {
