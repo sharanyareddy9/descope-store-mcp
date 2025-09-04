@@ -14,7 +14,10 @@ const app = express();
 
 // Environment variables for Vercel
 const STORE_BASE_URL = process.env.DESCOPE_STORE_URL || 'https://descope-store.vercel.app';
-const SERVER_URL = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://localhost:3443';
+// Use production URL instead of preview URL for consistent domain
+const SERVER_URL = process.env.NODE_ENV === 'production'
+  ? 'https://descope-store-mcp.vercel.app'
+  : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://localhost:3443');
 
 // Middleware
 app.use(express.json());
