@@ -3,12 +3,9 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import { z } from "zod";
-import {
-  descopeMcpAuthRouter,
-  descopeMcpBearerAuth,
-  defineTool,
-  createMcpServerHandler
-} from "@descope/mcp-express";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { descopeMcpAuthRouter, descopeMcpBearerAuth } from "@descope/mcp-express";
 
 const app = express();
 
@@ -23,103 +20,46 @@ const SERVER_URL = process.env.NODE_ENV === 'production'
 app.use(express.json());
 app.use(cors({
   origin: '*',
-  credentials: true
+  credentials: true,
+  methods: '*',
+  allowedHeaders: 'Authorization, Origin, Content-Type, Accept, mcp-protocol-version, *',
 }));
 
-// Manual OAuth routes implementation (based on working weather server pattern)
-// The @descope/mcp-express descopeMcpAuthRouter has issues, so we implement manually
+// Auth middleware - MUST be in this order
+app.use(descopeMcpAuthRouter());
+app.use(["/mcp"], descopeMcpBearerAuth());
 
-// OAuth authorization endpoint - redirects to Descope
-app.get('/authorize', (req, res) => {
-  const params = req.query;
-  
-  // If no scope is provided, add the default openid scope
-  if (!params.scope) {
-    params.scope = "openid";
-  }
-  
-  // Build Descope OAuth URL
-  const descopeAuthUrl = new URL('https://api.descope.com/oauth2/v1/apps/authorize');
-  
-  // Forward all parameters to Descope
-  Object.entries(params).forEach(([key, value]) => {
-    if (value) {
-      descopeAuthUrl.searchParams.set(key, value);
-    }
-  });
-  
-  // Redirect to Descope OAuth
-  res.redirect(descopeAuthUrl.toString());
+// Initialize MCP Server
+const server = new McpServer({
+  name: "Descope Store MCP Server",
+  version: "1.0.0",
 });
 
-// OAuth metadata endpoint (override the broken one from descopeMcpAuthRouter)
-app.get('/.well-known/oauth-authorization-server', (req, res) => {
-  const metadata = {
-    issuer: `https://api.descope.com/${process.env.DESCOPE_PROJECT_ID}`,
-    authorization_endpoint: `${SERVER_URL}/authorize`,
-    response_types_supported: ["code"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint: "https://api.descope.com/oauth2/v1/apps/token",
-    token_endpoint_auth_methods_supported: ["client_secret_post"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    revocation_endpoint: "https://api.descope.com/oauth2/v1/apps/revoke",
-    revocation_endpoint_auth_methods_supported: ["client_secret_post"],
-    registration_endpoint: `${SERVER_URL}/register`,
-    scopes_supported: ["openid", "profile"]
-  };
-  
-  res.json(metadata);
-});
-
-// OAuth client registration endpoint
-app.get('/register', (req, res) => {
-  res.json({
-    client_id: process.env.DESCOPE_PROJECT_ID,
-    client_name: 'Descope Store MCP Server',
-    redirect_uris: [`${SERVER_URL}/callback`],
-    response_types: ['code'],
-    grant_types: ['authorization_code', 'refresh_token'],
-    token_endpoint_auth_method: 'client_secret_post',
-    scope: 'openid profile'
-  });
-});
-
-// Keep the original descopeMcpAuthRouter call but it should be overridden by our manual routes above
-app.use(descopeMcpAuthRouter({
-  projectId: process.env.DESCOPE_PROJECT_ID,
-  managementKey: process.env.DESCOPE_MANAGEMENT_KEY,
-  serverUrl: SERVER_URL
-}));
-
-// Note: Bearer auth is handled by the MCP handler itself, not as middleware
-// This allows unauthenticated requests to /sse to be redirected to OAuth login
-
-// Define authenticated tools using Descope MCP Express SDK
-const searchProducts = defineTool({
-  name: "search_products",
-  description: "Search for Descope authentication products in the store",
-  input: {
+// Define MCP tools
+server.tool(
+  "search_products",
+  "Search for Descope authentication products in the store",
+  {
     query: z.string().optional().describe("Search query for products"),
     category: z.string().optional().describe("Product category filter (apparel, accessories)")
   },
-  scopes: ["store:read"],
-  handler: async (args, extra) => {
+  async ({ query, category }, { auth }) => {
     try {
       // Fetch products from deployed Descope store
       const response = await axios.get(`${STORE_BASE_URL}/api/products`);
       let products = response.data;
 
       // Apply search filters
-      if (args.query) {
+      if (query) {
         products = products.filter(p => 
-          p.title.toLowerCase().includes(args.query.toLowerCase()) ||
-          p.description.toLowerCase().includes(args.query.toLowerCase())
+          p.title.toLowerCase().includes(query.toLowerCase()) ||
+          p.description.toLowerCase().includes(query.toLowerCase())
         );
       }
 
-      if (args.category) {
+      if (category) {
         products = products.filter(p => 
-          p.product_type.toLowerCase() === args.category.toLowerCase()
+          p.product_type.toLowerCase() === category.toLowerCase()
         );
       }
 
@@ -128,10 +68,10 @@ const searchProducts = defineTool({
           type: "text",
           text: JSON.stringify({
             found: products.length,
-            query: args.query,
-            category: args.category,
+            query: query,
+            category: category,
             products: products,
-            user_scopes: extra.authInfo.scopes
+            user_scopes: auth?.scopes || []
           }, null, 2)
         }]
       };
@@ -144,26 +84,25 @@ const searchProducts = defineTool({
       };
     }
   }
-});
+);
 
-const getProduct = defineTool({
-  name: "get_product",
-  description: "Get detailed information about a specific Descope store product",
-  input: {
+server.tool(
+  "get_product",
+  "Get detailed information about a specific Descope store product",
+  {
     product_id: z.string().describe("The product ID to retrieve")
   },
-  scopes: ["store:read"],
-  handler: async (args, extra) => {
+  async ({ product_id }, { auth }) => {
     try {
       // Fetch products from deployed Descope store
       const response = await axios.get(`${STORE_BASE_URL}/api/products`);
-      const product = response.data.find(p => p.id === args.product_id);
+      const product = response.data.find(p => p.id === product_id);
       
       if (!product) {
         return {
           content: [{
             type: "text",
-            text: `Product with ID "${args.product_id}" not found`
+            text: `Product with ID "${product_id}" not found`
           }]
         };
       }
@@ -174,7 +113,7 @@ const getProduct = defineTool({
           text: JSON.stringify({
             ...product,
             user_info: {
-              scopes: extra.authInfo.scopes,
+              scopes: auth?.scopes || [],
               authenticated_at: new Date().toISOString()
             }
           }, null, 2)
@@ -189,20 +128,19 @@ const getProduct = defineTool({
       };
     }
   }
-});
+);
 
-const compareProducts = defineTool({
-  name: "compare_products", 
-  description: "Compare multiple Descope store products side by side",
-  input: {
+server.tool(
+  "compare_products", 
+  "Compare multiple Descope store products side by side",
+  {
     product_ids: z.array(z.string()).min(2).max(4).describe("Array of 2-4 product IDs to compare")
   },
-  scopes: ["store:read"],
-  handler: async (args, extra) => {
+  async ({ product_ids }, { auth }) => {
     try {
       // Fetch products from deployed Descope store
       const response = await axios.get(`${STORE_BASE_URL}/api/products`);
-      const products = response.data.filter(p => args.product_ids.includes(p.id));
+      const products = response.data.filter(p => product_ids.includes(p.id));
       
       if (products.length === 0) {
         return {
@@ -215,7 +153,7 @@ const compareProducts = defineTool({
 
       const comparison = {
         total_compared: products.length,
-        requested_ids: args.product_ids,
+        requested_ids: product_ids,
         comparison: products.map(p => ({
           id: p.id,
           title: p.title,
@@ -230,7 +168,7 @@ const compareProducts = defineTool({
           reason: "Based on availability and features"
         } : null,
         auth_info: {
-          scopes: extra.authInfo.scopes,
+          scopes: auth?.scopes || [],
           comparison_time: new Date().toISOString()
         }
       };
@@ -250,14 +188,13 @@ const compareProducts = defineTool({
       };
     }
   }
-});
+);
 
-const getStoreInfo = defineTool({
-  name: "get_store_info",
-  description: "Get general information about the Descope authentication store",
-  input: {},
-  scopes: ["store:read"],
-  handler: async (args, extra) => {
+server.tool(
+  "get_store_info",
+  "Get general information about the Descope authentication store",
+  {},
+  async (args, { auth }) => {
     const storeInfo = {
       store_name: "Descope Authentication Store",
       description: "Premium authentication-themed merchandise and apparel",
@@ -272,7 +209,7 @@ const getStoreInfo = defineTool({
         mcp_version: "2025-03-26",
         auth_provider: "Descope OAuth 2.1",
         deployment: "Vercel Serverless",
-        user_scopes: extra.authInfo.scopes
+        user_scopes: auth?.scopes || []
       }
     };
 
@@ -283,21 +220,48 @@ const getStoreInfo = defineTool({
       }]
     };
   }
+);
+
+// Initialize transport
+const transport = new StreamableHTTPServerTransport({
+  sessionIdGenerator: undefined, // set to undefined for stateless servers
 });
 
-// Create MCP server handler with all tools
-const mcpHandler = createMcpServerHandler([
-  searchProducts,
-  getProduct,
-  compareProducts,
-  getStoreInfo
-]);
+// MCP endpoint - MUST be POST
+app.post('/mcp', async (req, res) => {
+  console.log('Received MCP request:', req.body);
+  try {
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('Error handling MCP request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal server error',
+        },
+        id: null,
+      });
+    }
+  }
+});
 
-// Auth middleware - use descopeMcpBearerAuth on /mcp routes
-app.use(["/mcp"], descopeMcpBearerAuth());
+// Method not allowed handlers
+const methodNotAllowed = (req, res) => {
+  console.log(`Received ${req.method} MCP request`);
+  res.status(405).json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed."
+    },
+    id: null
+  });
+};
 
-// Mount MCP handler on /mcp route
-app.use('/mcp', mcpHandler);
+app.get('/mcp', methodNotAllowed);
+app.delete('/mcp', methodNotAllowed);
 
 // Public endpoints
 app.get('/', (req, res) => {
@@ -436,33 +400,6 @@ app.get('/', (req, res) => {
             </div>
 
             <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-bold font-heading text-white mb-4">IDE Integration</h2>
-                <div class="space-y-6">
-                    <div>
-                        <h3 class="text-xl font-semibold text-white mb-3">Claude Desktop</h3>
-                        <ol class="list-decimal pl-6 space-y-2 text-gray-300">
-                            <li>Open Claude Desktop Settings</li>
-                            <li>Navigate to <strong class="font-semibold text-white">MCP Servers</strong></li>
-                            <li>Add the configuration above to your <code class="bg-gray-800 px-2 py-1 rounded">claude_desktop_config.json</code></li>
-                            <li>Restart Claude Desktop</li>
-                            <li>Authenticate via OAuth when prompted</li>
-                        </ol>
-                    </div>
-
-                    <div>
-                        <h3 class="text-xl font-semibold text-white mb-3">Windsurf</h3>
-                        <ol class="list-decimal pl-6 space-y-2 text-gray-300">
-                            <li>Open Windsurf Settings</li>
-                            <li>Navigate to <strong class="font-semibold text-white">Cascade</strong> → <strong class="font-semibold text-white">Model Context Provider Servers</strong></li>
-                            <li>Select <strong class="font-semibold text-white">Add Server</strong></li>
-                            <li>Enter the server URL above</li>
-                            <li>Complete OAuth authentication</li>
-                        </ol>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card rounded-lg p-6">
                 <h2 class="text-2xl font-bold font-heading text-white mb-4">Available Tools</h2>
                 <div class="grid md:grid-cols-2 gap-4">
                     <div class="bg-gray-800 p-4 rounded-lg">
@@ -504,12 +441,6 @@ app.get('/', (req, res) => {
                         <span class="text-gray-300">Secure Descope integration</span>
                     </div>
                 </div>
-            </div>
-
-            <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-bold font-heading text-white mb-4">Troubleshooting</h2>
-                <p class="mb-4 text-gray-300">If you encounter authentication issues, try clearing the MCP auth cache:</p>
-                <pre class="relative"><code>rm -rf ~/.mcp-auth</code><button class="copy-button" onclick="copyToClipboard(this.previousElementSibling, this)">Copy</button></pre>
             </div>
         </div>
     </main>
@@ -575,70 +506,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// MCP Discovery endpoints that Claude Web might expect
-app.get('/.well-known/mcp-capabilities', (req, res) => {
-  res.json({
-    version: '2025-03-26',
-    capabilities: {
-      tools: {
-        listChanged: true
-      },
-      resources: {
-        subscribe: false,
-        listChanged: false
-      },
-      prompts: {
-        listChanged: false
-      },
-      logging: {}
-    },
-    serverInfo: {
-      name: 'Descope Store MCP Server',
-      version: '1.0.0'
-    },
-    tools: [
-      {
-        name: 'search_products',
-        description: 'Search for Descope authentication products in the store'
-      },
-      {
-        name: 'get_product',
-        description: 'Get detailed information about a specific Descope store product'
-      },
-      {
-        name: 'compare_products',
-        description: 'Compare multiple Descope store products side by side'
-      },
-      {
-        name: 'get_store_info',
-        description: 'Get general information about the Descope authentication store'
-      }
-    ]
-  });
-});
-
-app.get('/.well-known/mcp-server', (req, res) => {
-  res.json({
-    name: 'Descope Store MCP Server',
-    version: '1.0.0',
-    mcp_version: '2025-03-26',
-    endpoints: {
-      mcp: `${SERVER_URL}/mcp`
-    },
-    auth: {
-      type: 'oauth2',
-      authorization_url: `https://app.descope.com/oauth2/v1/authorize`,
-      token_url: `https://api.descope.com/oauth2/v1/token`,
-      scopes: ['store:read']
-    }
-  });
-});
-
-// Alternative endpoint that some MCP clients might expect
-app.get('/mcp/capabilities', (req, res) => {
-  res.redirect('/.well-known/mcp-capabilities');
-});
-
 // Favicon endpoint to prevent 404 errors in Claude Web
 app.get('/favicon.ico', (req, res) => {
   // Return a simple 1x1 transparent PNG
@@ -649,6 +516,22 @@ app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/png');
   res.set('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
   res.send(transparentPng);
+});
+
+// Server setup for Vercel
+const setupServer = async () => {
+  try {
+    await server.connect(transport);
+    console.log('MCP Server connected successfully');
+  } catch (error) {
+    console.error('Failed to set up the MCP server:', error);
+    throw error;
+  }
+};
+
+// Initialize server connection
+setupServer().catch(error => {
+  console.error('Failed to start MCP server:', error);
 });
 
 // Export for Vercel
