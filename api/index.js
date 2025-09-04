@@ -26,7 +26,65 @@ app.use(cors({
   credentials: true
 }));
 
-// Add Descope MCP Auth Router (OAuth 2.1 endpoints)
+// Manual OAuth routes implementation (based on working weather server pattern)
+// The @descope/mcp-express descopeMcpAuthRouter has issues, so we implement manually
+
+// OAuth authorization endpoint - redirects to Descope
+app.get('/authorize', (req, res) => {
+  const params = req.query;
+  
+  // If no scope is provided, add the default openid scope
+  if (!params.scope) {
+    params.scope = "openid";
+  }
+  
+  // Build Descope OAuth URL
+  const descopeAuthUrl = new URL('https://api.descope.com/oauth2/v1/apps/authorize');
+  
+  // Forward all parameters to Descope
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      descopeAuthUrl.searchParams.set(key, value);
+    }
+  });
+  
+  // Redirect to Descope OAuth
+  res.redirect(descopeAuthUrl.toString());
+});
+
+// OAuth metadata endpoint (override the broken one from descopeMcpAuthRouter)
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  const metadata = {
+    issuer: `https://api.descope.com/${process.env.DESCOPE_PROJECT_ID}`,
+    authorization_endpoint: `${SERVER_URL}/authorize`,
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint: "https://api.descope.com/oauth2/v1/apps/token",
+    token_endpoint_auth_methods_supported: ["client_secret_post"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    revocation_endpoint: "https://api.descope.com/oauth2/v1/apps/revoke",
+    revocation_endpoint_auth_methods_supported: ["client_secret_post"],
+    registration_endpoint: `${SERVER_URL}/register`,
+    scopes_supported: ["openid", "profile"]
+  };
+  
+  res.json(metadata);
+});
+
+// OAuth client registration endpoint
+app.get('/register', (req, res) => {
+  res.json({
+    client_id: process.env.DESCOPE_PROJECT_ID,
+    client_name: 'Descope Store MCP Server',
+    redirect_uris: [`${SERVER_URL}/callback`],
+    response_types: ['code'],
+    grant_types: ['authorization_code', 'refresh_token'],
+    token_endpoint_auth_method: 'client_secret_post',
+    scope: 'openid profile'
+  });
+});
+
+// Keep the original descopeMcpAuthRouter call but it should be overridden by our manual routes above
 app.use(descopeMcpAuthRouter({
   projectId: process.env.DESCOPE_PROJECT_ID,
   managementKey: process.env.DESCOPE_MANAGEMENT_KEY,
