@@ -27,7 +27,11 @@ app.use(cors({
 }));
 
 // Add Descope MCP Auth Router (OAuth 2.1 endpoints)
-app.use(descopeMcpAuthRouter());
+app.use(descopeMcpAuthRouter({
+  projectId: process.env.DESCOPE_PROJECT_ID,
+  managementKey: process.env.DESCOPE_MANAGEMENT_KEY,
+  serverUrl: SERVER_URL
+}));
 
 // Note: Bearer auth is handled by the MCP handler itself, not as middleware
 // This allows unauthenticated requests to /sse to be redirected to OAuth login
@@ -240,7 +244,9 @@ app.use('/sse', (req, res, next) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     // For browser requests, still redirect to OAuth login for user convenience
     if (req.headers.accept && req.headers.accept.includes('text/html')) {
-      const redirectUrl = `https://app.descope.com/oauth2/v1/authorize?response_type=code&client_id=${process.env.DESCOPE_PROJECT_ID}&redirect_uri=${encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)}&scope=store:read&state=oauth_state`;
+      // Always use HTTPS for redirect URI (Vercel always serves over HTTPS)
+      const redirectUri = `https://${req.get('host')}${req.originalUrl}`;
+      const redirectUrl = `https://app.descope.com/oauth2/v1/authorize?response_type=code&client_id=${process.env.DESCOPE_PROJECT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=store:read&state=oauth_state`;
       return res.redirect(redirectUrl);
     }
     
