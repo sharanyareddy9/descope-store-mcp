@@ -537,5 +537,70 @@ app.get('/health', (req, res) => {
   });
 });
 
+// MCP Discovery endpoints that Claude Web might expect
+app.get('/.well-known/mcp-capabilities', (req, res) => {
+  res.json({
+    version: '2025-03-26',
+    capabilities: {
+      tools: {
+        listChanged: true
+      },
+      resources: {
+        subscribe: false,
+        listChanged: false
+      },
+      prompts: {
+        listChanged: false
+      },
+      logging: {}
+    },
+    serverInfo: {
+      name: 'Descope Store MCP Server',
+      version: '1.0.0'
+    },
+    tools: [
+      {
+        name: 'search_products',
+        description: 'Search for Descope authentication products in the store'
+      },
+      {
+        name: 'get_product',
+        description: 'Get detailed information about a specific Descope store product'
+      },
+      {
+        name: 'compare_products',
+        description: 'Compare multiple Descope store products side by side'
+      },
+      {
+        name: 'get_store_info',
+        description: 'Get general information about the Descope authentication store'
+      }
+    ]
+  });
+});
+
+app.get('/.well-known/mcp-server', (req, res) => {
+  res.json({
+    name: 'Descope Store MCP Server',
+    version: '1.0.0',
+    mcp_version: '2025-03-26',
+    endpoints: {
+      sse: `${SERVER_URL}/sse`,
+      message: `${SERVER_URL}/message`
+    },
+    auth: {
+      type: 'oauth2',
+      authorization_url: `https://app.descope.com/oauth2/v1/authorize`,
+      token_url: `https://api.descope.com/oauth2/v1/token`,
+      scopes: ['store:read']
+    }
+  });
+});
+
+// Alternative endpoint that some MCP clients might expect
+app.get('/mcp/capabilities', (req, res) => {
+  res.redirect('/.well-known/mcp-capabilities');
+});
+
 // Export for Vercel
 export default app;
