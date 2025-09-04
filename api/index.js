@@ -229,27 +229,25 @@ const mcpHandler = createMcpServerHandler([
 ]);
 
 // Custom authentication middleware for /sse endpoint
-// Redirects unauthenticated requests to Descope OAuth login
+// Returns 401 Unauthorized for unauthenticated requests (like weather MCP server)
 app.use('/sse', (req, res, next) => {
   // Check if this is an unauthenticated request (no Authorization header)
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // For browser requests, redirect to OAuth login
+    // For browser requests, still redirect to OAuth login for user convenience
     if (req.headers.accept && req.headers.accept.includes('text/html')) {
       const redirectUrl = `https://app.descope.com/oauth2/v1/authorize?response_type=code&client_id=${process.env.DESCOPE_PROJECT_ID}&redirect_uri=${encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)}&scope=store:read&state=oauth_state`;
       return res.redirect(redirectUrl);
     }
     
-    // For MCP clients expecting SSE, check if they have proper Accept header
-    if (req.headers.accept && req.headers.accept.includes('text/event-stream')) {
-      // This is likely an MCP client - let the handler deal with authentication
-      return next();
-    }
-    
-    // For other requests, redirect to OAuth
-    const redirectUrl = `https://app.descope.com/oauth2/v1/authorize?response_type=code&client_id=${process.env.DESCOPE_PROJECT_ID}&redirect_uri=${encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)}&scope=store:read&state=oauth_state`;
-    return res.redirect(redirectUrl);
+    // For MCP clients and API requests, return 401 with proper WWW-Authenticate header
+    res.set('WWW-Authenticate', 'Bearer error="invalid_token", error_description="Missing Authorization header"');
+    res.set('Content-Type', 'application/json');
+    return res.status(401).json({
+      error: "invalid_token",
+      error_description: "Missing Authorization header"
+    });
   }
   
   // If authenticated, proceed to MCP handler
